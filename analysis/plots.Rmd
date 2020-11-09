@@ -96,7 +96,8 @@ age_prop_plot <- ggplot(age_dist_9, aes(x = Age, y = prop)) +
   )
 
 age_count_plot <- age_dist_9 %>% 
-  select(-prop) %>% 
+  mutate(total_remaining = total_in_age_group - indiv_9_month) %>% 
+  select(-prop, -total_in_age_group) %>% 
   gather(measure, value, -Age) %>% 
   ggplot(aes(x = Age, y = value, fill = measure)) +
   geom_bar(stat = 'identity', position = 'stack') +
@@ -108,7 +109,7 @@ age_count_plot <- age_dist_9 %>%
     axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
     axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
     axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = c(0.27, 0.8),
+    legend.position = c(0.2, 0.8),
     legend.title = element_blank(),
     plot.tag = element_text(face = 'bold')
   ) +
@@ -161,12 +162,13 @@ prov_prop_plot <- ggplot(prov_dist_9, aes(x = prov, y = prop)) +
   coord_cartesian(y = c(0, 1))
 
 prov_count_plot <- prov_dist_9 %>% 
-  select(-prop) %>% 
+  mutate(total_remaining = total_in_prov_group - indiv_9_month) %>% 
+  select(-prop, -total_in_prov_group) %>% 
   gather(measure, value, -prov) %>% 
   ggplot(aes(x = prov, y = value, fill = measure)) +
   geom_bar(stat = 'identity', position = 'stack') +
   scale_fill_manual(
-    labels = c('total number\n of patients', 'retained till\n 9 months'), 
+    labels = c('total number of patients', 'retained till 9 months'), 
     values = viridis(6)[3:4]) +
   theme_classic() +
   theme(
@@ -174,7 +176,7 @@ prov_count_plot <- prov_dist_9 %>%
     axis.text.x = element_text(angle = 45, hjust = 1),
     axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
     plot.tag = element_text(face = 'bold'),
-    legend.text = element_text(size = 7),
+    legend.text = element_text(size = 9),
     legend.position = c(0.2, 0.8),
     legend.title = element_blank()
   ) +
@@ -226,19 +228,20 @@ con_act_prop_plot <- ggplot(con_act_dist_9, aes(x = con_act, y = prop)) +
   coord_cartesian(y = c(0, 1))
 
 con_act_count_plot <- con_act_dist_9 %>% 
-  select(-prop) %>% 
+  mutate(total_remaining = total_in_con_act_group - indiv_9_month) %>% 
+  select(-prop, -total_in_con_act_group) %>% 
   gather(measure, value, -con_act) %>% 
   ggplot(aes(x = con_act, y = value, fill = measure)) +
   geom_bar(stat = 'identity', position = 'stack') +
   scale_fill_manual(
-    labels = c('total number\n of patients', 'retained till\n 9 months'), 
+    labels = c('total number of patients', 'retained till 9 months'), 
     values = viridis(6)[3:4]) +
   theme_classic() +
   theme(
     axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
     axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
-    legend.text = element_text(family = 'Helvetica', size = 7),
-    legend.position = c(0.85, 0.9),
+    legend.text = element_text(family = 'Helvetica', size = 9),
+    legend.position = c(0.2, 0.9),
     legend.title = element_blank(),
     plot.tag = element_text(face = 'bold')
   ) +
@@ -247,7 +250,7 @@ con_act_count_plot <- con_act_dist_9 %>%
     y = 'Count of patients\n retained at 9 month mark',
     tag = 'B'
   ) +
-  coord_cartesian(y = c(0, 2000))
+  coord_cartesian(y = c(0, 1500))
 
 con_act_q1_plot <- con_act_prop_plot + con_act_count_plot
 
@@ -290,20 +293,21 @@ sex_prop_plot <- ggplot(sex_dist_9, aes(x = sex, y = prop)) +
   coord_cartesian(y = c(0, 1))
 
 sex_count_plot <- sex_dist_9 %>% 
-  select(-prop) %>% 
+  mutate(total_remaining = total_in_sex_group - indiv_9_month) %>% 
+  select(-prop, -total_in_sex_group) %>% 
   gather(measure, value, -sex) %>% 
   ggplot(aes(x = sex, y = value, fill = measure)) +
   geom_bar(stat = 'identity', position = 'stack') +
   scale_fill_manual(
-    labels = c('total number\n of patients', 'retained till\n 9 months'), 
+    labels = c('total number of patients', 'retained till 9 months'), 
     values = viridis(6)[3:4]) +
   theme_classic() +
   theme(
     axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
     axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
-    legend.position = c(0.8, 0.9),
+    legend.position = c(0.2, 0.9),
     legend.title = element_blank(),
-    legend.text = element_text(family = 'Helvetica', size = 7),
+    legend.text = element_text(family = 'Helvetica', size = 9),
     plot.tag = element_text(face = 'bold')
   ) +
   labs(
@@ -311,7 +315,7 @@ sex_count_plot <- sex_dist_9 %>%
     y = 'Count of patients\n retained at 9 month mark',
     tag = 'B'
   ) +
-  coord_cartesian(y = c(0, 1500))
+  coord_cartesian(y = c(0, 1250))
 
 sex_q1_plot <- sex_prop_plot + sex_count_plot
 
