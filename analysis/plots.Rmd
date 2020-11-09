@@ -1,0 +1,721 @@
+---
+title: "Octagon plots"
+author: "Ahmed Hasan and Madeleine Oman"
+output: pdf_document
+---
+
+# Load in packages
+
+```{r}
+library(readr)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr, warn.conflicts = FALSE)
+library(purrr)
+library(ggplot2)
+library(patchwork)
+library(cowplot) # for legend operations
+library(viridis)
+library(fs)
+library(here)
+
+din1 <- 6.34375
+din2 <- 3.385417
+```
+
+# Load in data
+
+```{r}
+ind_data <- read_csv(here('data/dataframe_with_ind_rows.csv')) %>% 
+  select(-X1)
+head(ind_data)
+
+all_data <- read_csv(here('data/dataset_with_ALL_values.csv')) %>% 
+  select(-X1)
+
+# expected total number of individuals
+all_data %>% 
+  select(Prov:Measure, M0) %>% 
+  filter(Sex == 'ALL', Con_ACT == 'ALL', Age == 'ALL')
+```
+
+# Analysis
+
+## How many made it to 9 months?
+
+```{r}
+ind_data %>% 
+  filter(Month_lasted >= 9) %>% 
+  arrange(Month_lasted) %>% 
+  dim() # 764
+```
+
+That seems off -- double checking this with the ALL only dataset: 
+
+```{r}
+all_data %>% 
+  select(Prov:Measure, M9) %>% 
+  filter(Measure == 'Tx', Sex == 'ALL', Con_ACT == 'ALL', Age == 'ALL', Prov == 'ALL')
+  View()
+
+head(all_data) # 704
+```
+
+# Plots
+
+## Distribution of ages of 9+ month survivors
+
+```{r}
+age_dist_9 <- ind_data %>% 
+  arrange(Age) %>% # get total number of people in age group
+  group_by(Age) %>% 
+  mutate(total_in_age_group = n()) %>% 
+  ungroup() %>% 
+  filter(Month_lasted >= 9) %>% # filter out >=9
+  arrange(Month_lasted) %>% 
+  group_by(Age) %>% 
+  mutate(indiv_9_month = n()) %>% # get number of people after filtering
+  select(Age, total_in_age_group, indiv_9_month) %>% # compress dataset
+  distinct() %>% 
+  mutate(prop = indiv_9_month / total_in_age_group) # get proportions
+
+age_dist_9
+
+age_prop_plot <- ggplot(age_dist_9, aes(x = Age, y = prop)) +
+  geom_bar(stat = 'identity', fill = viridis(6)[2]) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.tag = element_text(face = 'bold')
+  ) +
+  labs(
+    x = 'Age group',
+    y = 'Proportion of patients\n retained at 9 month mark',
+    tag = 'A'
+  )
+
+age_count_plot <- age_dist_9 %>% 
+  select(-prop) %>% 
+  gather(measure, value, -Age) %>% 
+  ggplot(aes(x = Age, y = value, fill = measure)) +
+  geom_bar(stat = 'identity', position = 'stack') +
+  scale_fill_manual(
+    labels = c('total number of patients', 'retained till 9 months'), 
+    values = viridis(6)[3:4]) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = c(0.27, 0.8),
+    legend.title = element_blank(),
+    plot.tag = element_text(face = 'bold')
+  ) +
+  labs(
+    x = 'Age group',
+    y = 'Count of patients\n retained at 9 month mark',
+    tag = 'B'
+  )
+
+age_q1_plot <- age_prop_plot + age_count_plot
+
+ggsave(here('plots/Q1/age.pdf'), plot = age_q1_plot,
+       width = din1 * 1.4, height = din2 * 1.4)
+  
+```
+
+## Province
+
+```{r}
+prov_dist_9 <- ind_data %>% 
+  rename(prov = Prov) %>% 
+  arrange(prov) %>% # get total number of people in prov group
+  group_by(prov) %>% 
+  mutate(total_in_prov_group = n()) %>% 
+  ungroup() %>% 
+  filter(Month_lasted >= 9) %>% # filter out >=9
+  arrange(Month_lasted) %>% 
+  group_by(prov) %>% 
+  mutate(indiv_9_month = n()) %>% # get number of people after filtering
+  select(prov, total_in_prov_group, indiv_9_month) %>% # compress dataset
+  distinct() %>% 
+  mutate(prop = indiv_9_month / total_in_prov_group) # get proportions
+
+prov_dist_9
+
+prov_prop_plot <- ggplot(prov_dist_9, aes(x = prov, y = prop)) +
+  geom_bar(stat = 'identity', fill = viridis(6)[2]) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    plot.tag = element_text(face = 'bold')
+  ) +
+  labs(
+    x = 'Province',
+    y = 'Proportion of patients\n retained at 9 month mark',
+    tag = 'A'
+  ) +
+  coord_cartesian(y = c(0, 1))
+
+prov_count_plot <- prov_dist_9 %>% 
+  select(-prop) %>% 
+  gather(measure, value, -prov) %>% 
+  ggplot(aes(x = prov, y = value, fill = measure)) +
+  geom_bar(stat = 'identity', position = 'stack') +
+  scale_fill_manual(
+    labels = c('total number\n of patients', 'retained till\n 9 months'), 
+    values = viridis(6)[3:4]) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    plot.tag = element_text(face = 'bold'),
+    legend.text = element_text(size = 7),
+    legend.position = c(0.2, 0.8),
+    legend.title = element_blank()
+  ) +
+  labs(
+    x = 'Province',
+    y = 'Count of patients\n retained at 9 month mark',
+    tag = 'B'
+  )
+
+prov_q1_plot <- prov_prop_plot + prov_count_plot
+
+ggsave(here('plots/Q1/prov.pdf'), plot = prov_q1_plot,
+       width = din1 * 1.4, height = din2 * 1.4)
+
+```
+
+## Con_ACT
+
+```{r}
+con_act_dist_9 <- ind_data %>% 
+  rename(con_act = Con_ACT) %>% 
+  arrange(con_act) %>% # get total number of people in con_act group
+  group_by(con_act) %>% 
+  mutate(total_in_con_act_group = n()) %>% 
+  ungroup() %>% 
+  filter(Month_lasted >= 9) %>% # filter out >=9
+  arrange(Month_lasted) %>% 
+  group_by(con_act) %>% 
+  mutate(indiv_9_month = n()) %>% # get number of people after filtering
+  select(con_act, total_in_con_act_group, indiv_9_month) %>% # compress dataset
+  distinct() %>% 
+  mutate(prop = indiv_9_month / total_in_con_act_group) # get proportions
+
+con_act_dist_9$con_act <- factor(con_act_dist_9$con_act, levels = c('Yes', 'No', 'Null'))
+
+con_act_prop_plot <- ggplot(con_act_dist_9, aes(x = con_act, y = prop)) +
+  geom_bar(stat = 'identity', fill = viridis(6)[2]) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    plot.tag = element_text(face = 'bold')
+  ) +
+  labs(
+    x = 'Other treatment status',
+    y = 'Proportion of patients\n retained at 9 month mark',
+    tag = 'A'
+  ) +
+  coord_cartesian(y = c(0, 1))
+
+con_act_count_plot <- con_act_dist_9 %>% 
+  select(-prop) %>% 
+  gather(measure, value, -con_act) %>% 
+  ggplot(aes(x = con_act, y = value, fill = measure)) +
+  geom_bar(stat = 'identity', position = 'stack') +
+  scale_fill_manual(
+    labels = c('total number\n of patients', 'retained till\n 9 months'), 
+    values = viridis(6)[3:4]) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    legend.text = element_text(family = 'Helvetica', size = 7),
+    legend.position = c(0.85, 0.9),
+    legend.title = element_blank(),
+    plot.tag = element_text(face = 'bold')
+  ) +
+  labs(
+    x = 'Other treatment status',
+    y = 'Count of patients\n retained at 9 month mark',
+    tag = 'B'
+  ) +
+  coord_cartesian(y = c(0, 2000))
+
+con_act_q1_plot <- con_act_prop_plot + con_act_count_plot
+
+ggsave(here('plots/Q1/con_act.pdf'), plot = con_act_q1_plot,
+       width = din1 * 1.4, height = din2 * 1.4)
+```
+
+## Sex
+
+```{r}
+sex_dist_9 <- ind_data %>% 
+  rename(sex = Sex) %>% 
+  arrange(sex) %>% # get total number of people in sex group
+  group_by(sex) %>% 
+  mutate(total_in_sex_group = n()) %>% 
+  ungroup() %>% 
+  filter(Month_lasted >= 9) %>% # filter out >=9
+  arrange(Month_lasted) %>% 
+  group_by(sex) %>% 
+  mutate(indiv_9_month = n()) %>% # get number of people after filtering
+  select(sex, total_in_sex_group, indiv_9_month) %>% # compress dataset
+  distinct() %>% 
+  mutate(prop = indiv_9_month / total_in_sex_group) # get proportions
+
+sex_dist_9
+
+sex_prop_plot <- ggplot(sex_dist_9, aes(x = sex, y = prop)) +
+  geom_bar(stat = 'identity', fill = viridis(6)[2]) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    plot.tag = element_text(face = 'bold')
+  ) +
+  labs(
+    x = 'Other treatment status',
+    y = 'Proportion of patients\n retained at 9 month mark',
+    tag = 'A'
+  ) +
+  coord_cartesian(y = c(0, 1))
+
+sex_count_plot <- sex_dist_9 %>% 
+  select(-prop) %>% 
+  gather(measure, value, -sex) %>% 
+  ggplot(aes(x = sex, y = value, fill = measure)) +
+  geom_bar(stat = 'identity', position = 'stack') +
+  scale_fill_manual(
+    labels = c('total number\n of patients', 'retained till\n 9 months'), 
+    values = viridis(6)[3:4]) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    legend.position = c(0.8, 0.9),
+    legend.title = element_blank(),
+    legend.text = element_text(family = 'Helvetica', size = 7),
+    plot.tag = element_text(face = 'bold')
+  ) +
+  labs(
+    x = 'Other treatment status',
+    y = 'Count of patients\n retained at 9 month mark',
+    tag = 'B'
+  ) +
+  coord_cartesian(y = c(0, 1500))
+
+sex_q1_plot <- sex_prop_plot + sex_count_plot
+
+ggsave(here('plots/Q1/sex.pdf'), plot = sex_q1_plot,
+       width = din1 * 1.4, height = din2 * 1.4)
+```
+
+# Month retention
+
+Total rate:
+
+```{r}
+total_retention_count_plot <- ind_data %>% 
+  arrange(Month_lasted) %>% 
+  group_by(Month_lasted) %>% 
+  summarise(n_lasted = n()) %>% 
+  ggplot(aes(x = Month_lasted, y = n_lasted)) + 
+  geom_line(size = 1.2, color = 'dodger blue') +
+  labs(
+    x = 'month',
+    y = 'count of discontinuations'
+  ) +
+  coord_cartesian(x = c(0, 40.5)) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+    panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6))
+
+total_retention_rate_plot <- ind_data %>% 
+  rename(month = Month_lasted) %>% 
+  arrange(month) %>% 
+  group_by(month) %>% 
+  summarise(n_lasted = n()) %>% 
+  mutate(total = sum(n_lasted), 
+         n_lag = lag(n_lasted, default = 0), 
+         cs = cumsum(n_lag)) %>% 
+  mutate(remaining = total - cs) %>% 
+  select(-total, -cs, -n_lag) %>% 
+  mutate(prop = n_lasted / remaining) %>% 
+  ggplot(aes(x = month, y = prop)) +
+    geom_line(size = 1.2, color = 'dodger blue') +
+    labs(
+      x = 'month',
+      y = 'proportion of discontinuation'
+    ) +
+    coord_cartesian(x = c(0, 40.5)) +
+    theme_classic() +
+    theme(
+      axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+      axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+      panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+      panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6))
+
+total_retention_q3_plot <- total_retention_count_plot + total_retention_rate_plot
+
+ggsave(here('plots/Q3/total.pdf'), plot = total_retention_q3_plot,
+       width = din1 * 1.4, height = din2 * 1.4)
+
+```
+
+Retention curve:
+
+```{r}
+ind_data %>% 
+  rename(month = Month_lasted) %>% 
+  arrange(month) %>% 
+  group_by(month) %>% 
+  summarise(n_lasted = n()) %>% 
+  mutate(total = sum(n_lasted), 
+         n_lag = lag(n_lasted, default = 0), 
+         cs = cumsum(n_lag)) %>% 
+  mutate(remaining = total - cs) %>% 
+  select(-total, -cs, -n_lag) %>% 
+  ggplot(aes(x = month, y = remaining)) +
+  geom_line(size = 1.2, color = 'dodger blue') +
+  labs(
+    x = 'month',
+    y = 'remaining participants'
+  ) +
+  coord_cartesian(x = c(0, 40.5)) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 12),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 12),
+    panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+    panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6))
+```
+
+## Splitting plots
+
+### Sex
+
+```{r}
+total_retention_count_plot_sex <- ind_data %>% 
+  arrange(Month_lasted) %>% 
+  group_by(Month_lasted, Sex) %>% 
+  summarise(n_lasted = n()) %>% 
+  ggplot(aes(x = Month_lasted, y = n_lasted, color = Sex)) + 
+  geom_line(size = 1.2) +
+  scale_color_manual(values = viridis(6)[3:4]) +
+  labs(
+    x = 'month',
+    y = 'count of discontinuations'
+  ) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+    panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6)) +
+  coord_cartesian(x = c(0, 40.5))
+
+retention_sex_legend <- get_legend(total_retention_count_plot_sex)
+
+total_retention_count_plot_sex <-
+  total_retention_count_plot_sex + 
+  guides(color = FALSE)
+
+total_retention_rate_plot_sex <- ind_data %>% 
+  rename(month = Month_lasted) %>% 
+  arrange(month) %>% 
+  group_by(month, Sex) %>% 
+  summarise(n_lasted = n()) %>%  
+  group_by(Sex) %>% 
+  mutate(total = sum(n_lasted)) %>% 
+  split(.$Sex) %>% 
+  map_dfr(~ mutate(.,
+         n_lag = lag(n_lasted, default = 0), 
+         cs = cumsum(n_lag)), .id = 'Sex') %>% 
+  mutate(remaining = total - cs) %>% 
+  select(-total, -cs, -n_lag) %>% 
+  mutate(prop = n_lasted / remaining) %>% 
+  ggplot(aes(x = month, y = prop, color = Sex)) +
+    geom_line(size = 1.2) +
+    scale_color_manual(values = viridis(6)[3:4]) +
+    labs(
+      x = 'month',
+      y = 'proportion of discontinuation'
+    ) +
+    coord_cartesian(x = c(0, 40.5)) +
+    theme_classic() +
+    theme(
+      axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+      axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+      panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+      panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6)) +
+  guides(color = FALSE)
+
+sex_q3_plot <- total_retention_count_plot_sex + total_retention_rate_plot_sex +
+  retention_sex_legend + plot_layout(nrow = 1, ncol = 3, widths = c(1.1, 1.1, 0.3))
+
+ggsave(here('plots/Q3/sex.pdf'), plot = sex_q3_plot,
+       width = din1 * 1.4, height = din2 * 1.4)
+
+```
+
+### Province
+
+```{r}
+total_retention_count_plot_prov <- ind_data %>% 
+  rename(prov = Prov) %>% 
+  arrange(Month_lasted) %>% 
+  group_by(Month_lasted, prov) %>% 
+  summarise(n_lasted = n()) %>% 
+  ggplot(aes(x = Month_lasted, y = n_lasted, color = prov)) + 
+  geom_line(size = 1.1) +
+  scale_color_manual(values = viridis(7)) +
+  labs(
+    x = 'month',
+    y = 'count of discontinuations',
+    color = 'Province'
+  ) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+    panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6)) +
+  coord_cartesian(x = c(0, 40.5))
+
+retention_prov_legend <- get_legend(total_retention_count_plot_prov)
+
+total_retention_count_plot_prov <-
+  total_retention_count_plot_prov + 
+  guides(color = FALSE)
+
+total_retention_rate_plot_prov <- ind_data %>% 
+  rename(prov = Prov) %>% 
+  rename(month = Month_lasted) %>% 
+  arrange(month) %>% 
+  group_by(month, prov) %>% 
+  summarise(n_lasted = n()) %>%  
+  group_by(prov) %>% 
+  mutate(total = sum(n_lasted)) %>% 
+  split(.$prov) %>% 
+  map_dfr(~ mutate(.,
+         n_lag = lag(n_lasted, default = 0), 
+         cs = cumsum(n_lag)), .id = 'prov') %>% 
+  mutate(remaining = total - cs) %>% 
+  select(-total, -cs, -n_lag) %>% 
+  mutate(prop = n_lasted / remaining) %>% 
+  ggplot(aes(x = month, y = prop, color = prov)) +
+    geom_line(size = 1.1) +
+    scale_color_manual(values = viridis(7)) +
+    labs(
+      x = 'month',
+      y = 'proportion of discontinuation'
+    ) +
+    coord_cartesian(x = c(0, 40.5)) +
+    theme_classic() +
+    theme(
+      axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+      axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+      panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+      panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6)) +
+  guides(color = FALSE)
+
+prov_q3_plot <- total_retention_count_plot_prov + total_retention_rate_plot_prov +
+  retention_prov_legend + plot_layout(nrow = 1, ncol = 3, widths = c(1.1, 1.1, 0.3))
+
+ggsave(here('plots/Q3/prov.pdf'), plot = prov_q3_plot,
+       width = din1 * 1.4, height = din2 * 1.4)
+
+
+```
+
+### Other treatment status
+
+```{r}
+ind_data$Con_ACT <- factor(ind_data$Con_ACT, levels = c('Yes', 'No', 'Null'))
+
+total_retention_count_plot_con_act <- ind_data %>% 
+  rename(con_act = Con_ACT) %>% 
+  arrange(Month_lasted) %>% 
+  group_by(Month_lasted, con_act) %>% 
+  summarise(n_lasted = n()) %>% 
+  ggplot(aes(x = Month_lasted, y = n_lasted, color = con_act)) + 
+  geom_line(size = 1.1) +
+  scale_color_manual(values = viridis(6)[c(2, 3, 5)]) +
+  labs(
+    x = 'month',
+    y = 'count of discontinuations',
+    color = 'Other treatment\nstatus'
+  ) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+    panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6)) +
+  coord_cartesian(x = c(0, 40.5))
+
+retention_con_act_legend <- get_legend(total_retention_count_plot_con_act)
+
+total_retention_count_plot_con_act <-
+  total_retention_count_plot_con_act + 
+  guides(color = FALSE)
+
+total_retention_rate_plot_con_act <- ind_data %>% 
+  rename(con_act = Con_ACT) %>% 
+  rename(month = Month_lasted) %>% 
+  arrange(month) %>% 
+  group_by(month, con_act) %>% 
+  summarise(n_lasted = n()) %>%  
+  group_by(con_act) %>% 
+  mutate(total = sum(n_lasted)) %>% 
+  split(.$con_act) %>% 
+  map_dfr(~ mutate(.,
+         n_lag = lag(n_lasted, default = 0), 
+         cs = cumsum(n_lag)), .id = 'con_act') %>% 
+  mutate(remaining = total - cs) %>% 
+  select(-total, -cs, -n_lag) %>% 
+  mutate(prop = n_lasted / remaining) %>% 
+  ggplot(aes(x = month, y = prop, color = con_act)) +
+    geom_line(size = 1.1) +
+    scale_color_manual(values = viridis(6)[c(2, 3, 5)]) +
+    labs(
+      x = 'month',
+      y = 'proportion of discontinuation'
+    ) +
+    coord_cartesian(x = c(0, 40.5)) +
+    theme_classic() +
+    theme(
+      axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+      axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+      panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+      panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6)) +
+  guides(color = FALSE)
+
+con_act_q3_plot <- total_retention_count_plot_con_act + total_retention_rate_plot_con_act +
+  retention_con_act_legend + plot_layout(nrow = 1, ncol = 3, widths = c(1.1, 1.1, 0.3))
+
+ggsave(here('plots/Q3/con_act.pdf'), plot = con_act_q3_plot,
+       width = din1 * 1.4, height = din2 * 1.4)
+
+
+```
+
+
+### Age
+
+```{r}
+total_retention_count_plot_age <- ind_data %>% 
+  rename(age = Age) %>% 
+  arrange(Month_lasted) %>% 
+  group_by(Month_lasted, age) %>% 
+  summarise(n_lasted = n()) %>% 
+  ggplot(aes(x = Month_lasted, y = n_lasted, color = age)) + 
+  geom_line(size = 0.6) +
+  scale_color_manual(values = viridis(11)) +
+  labs(
+    x = 'month',
+    y = 'count of discontinuations',
+    color = 'Age'
+  ) +
+  theme_classic() +
+  theme(
+    axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+    axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+    strip.background = element_rect(size = 1.5),
+    strip.text = element_text(family = 'Helvetica', color = 'black'),
+    panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+    panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6)) +
+  coord_cartesian(x = c(0, 40.5)) +
+  facet_wrap(~ age) +
+  guides(color = FALSE)
+
+total_retention_count_plot_age
+
+total_retention_rate_plot_age <- ind_data %>% 
+  rename(age = Age) %>% 
+  rename(month = Month_lasted) %>% 
+  arrange(month) %>% 
+  group_by(month, age) %>% 
+  summarise(n_lasted = n()) %>%  
+  group_by(age) %>% 
+  mutate(total = sum(n_lasted)) %>% 
+  split(.$age) %>% 
+  map_dfr(~ mutate(.,
+         n_lag = lag(n_lasted, default = 0), 
+         cs = cumsum(n_lag)), .id = 'age') %>% 
+  mutate(remaining = total - cs) %>% 
+  select(-total, -cs, -n_lag) %>% 
+  mutate(prop = n_lasted / remaining) %>% 
+  ggplot(aes(x = month, y = prop, color = age)) +
+    geom_line(size = 0.6) +
+    scale_color_manual(values = viridis(11)) +
+    labs(
+      x = 'month',
+      y = 'proportion of discontinuation'
+    ) +
+    coord_cartesian(x = c(0, 40.5)) +
+    theme_classic() +
+    theme(
+      axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
+      axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
+      strip.background = element_rect(size = 1.5),
+      strip.text = element_text(family = 'Helvetica', color = 'black'),
+      panel.grid.major = element_line(color = 'dark grey', size = 0.2),
+      panel.grid.minor = element_line(color = 'light grey', size = 0.2)) +
+  scale_x_continuous(breaks = seq(0, 42, 6)) +
+  facet_wrap(~ age) +
+  guides(color = FALSE)
+
+age_q3_plot <- total_retention_count_plot_age + total_retention_rate_plot_age
+
+ggsave(here('plots/Q3/age.pdf'), plot = age_q3_plot,
+       width = din1 * 2, height = din2 * 2)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
