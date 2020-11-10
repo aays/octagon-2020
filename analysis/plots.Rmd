@@ -109,7 +109,7 @@ age_count_plot <- age_dist_9 %>%
     axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
     axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
     axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = c(0.2, 0.8),
+    legend.position = c(0.3, 0.8),
     legend.title = element_blank(),
     plot.tag = element_text(face = 'bold')
   ) +
@@ -177,14 +177,15 @@ prov_count_plot <- prov_dist_9 %>%
     axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
     plot.tag = element_text(face = 'bold'),
     legend.text = element_text(size = 9),
-    legend.position = c(0.2, 0.8),
+    legend.position = c(0.3, 0.9),
     legend.title = element_blank()
   ) +
   labs(
     x = 'Province',
     y = 'Count of patients\n retained at 9 month mark',
     tag = 'B'
-  )
+  ) +
+  coord_cartesian(y = c(0, 850))
 
 prov_q1_plot <- prov_prop_plot + prov_count_plot
 
@@ -241,7 +242,7 @@ con_act_count_plot <- con_act_dist_9 %>%
     axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
     axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
     legend.text = element_text(family = 'Helvetica', size = 9),
-    legend.position = c(0.2, 0.9),
+    legend.position = c(0.3, 0.9),
     legend.title = element_blank(),
     plot.tag = element_text(face = 'bold')
   ) +
@@ -305,7 +306,7 @@ sex_count_plot <- sex_dist_9 %>%
   theme(
     axis.text = element_text(family = 'Helvetica', color = 'black', size = 10),
     axis.title = element_text(family = 'Helvetica', color = 'black', size = 10),
-    legend.position = c(0.2, 0.9),
+    legend.position = c(0.3, 0.9),
     legend.title = element_blank(),
     legend.text = element_text(family = 'Helvetica', size = 9),
     plot.tag = element_text(face = 'bold')
