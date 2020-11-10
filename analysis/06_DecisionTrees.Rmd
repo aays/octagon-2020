@@ -1,0 +1,240 @@
+---
+title: "Tree-based method"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Import library packages
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyr)
+library(ISLR)
+library(MASS)
+```
+
+## Import dataset
+
+## Import dataset `LDA_df`
+```{r message=FALSE, warning=TRUE}
+df <- read.delim("../data/expanded_df.txt", na.strings="")
+names(df)
+dim(df)
+summary(df)
+df$index <- as.factor(df$index)
+#df$Sex <- as.factor(df$Sex)
+#df$Con_ACT<-as.factor(df$Con_ACT)
+df$Prov <- as.factor(df$Prov)
+
+df_clean <- df %>% drop_na(Prov, Con_ACT, Stay) %>% 
+  mutate(Age_num = as.numeric(regmatches(Age, regexpr('[0-9]{2}', Age))),
+         Sex = case_when(Sex == 'F' ~ 1,
+                         Sex == 'M' ~ 0),
+         Con_ACT = case_when(Con_ACT == 'Yes'~ 1,
+                             Con_ACT == 'No' ~ 0),
+         Stay =as.factor(case_when(Stay ==1 ~ 'Yes',
+                          Stay == 0 ~ 'No')) )
+
+scale_this <- function(x){
+  (x - mean(x, na.rm =TRUE)) / sd(x, na.rm =TRUE)
+}
+
+df_scaled <- df_clean %>%
+  mutate(Age_num = scale_this(Age_num),
+         Months_stayed = scale_this(Months_stayed))
+```
+
+## create training data
+```{r message=FALSE, warning=TRUE}
+sample_n_groups = function(grouped_df, size, replace = FALSE, weight=NULL) {
+  grp_var <- grouped_df %>% 
+    groups %>%
+    unlist %>% 
+    as.character()
+  random_grp <- grouped_df %>% 
+    summarise() %>% 
+    sample_n(size, replace, weight) %>% 
+    mutate(unique_id = 1:NROW(.))
+  grouped_df %>% 
+    right_join(random_grp, by=grp_var) %>% 
+    group_by_(grp_var) 
+}
+
+set.seed(420)
+training_clean<- df_clean %>% group_by(index) %>% sample_n_groups(144*2) %>% droplevels() %>% 
+  dplyr::select(Stay, Months_stayed, Sex, Age_num, Con_ACT, Prov)
+training_scaled<- df_scaled %>% group_by(index) %>% sample_n_groups(144*2) %>% droplevels() %>%
+  dplyr::select(Stay, Months_stayed, Sex, Age_num, Con_ACT, Prov)
+
+df_clean<- df_clean %>% mutate( train = case_when(index %in% levels(training_clean$index) ~ TRUE,
+                                                  TRUE ~ FALSE)) %>%
+  dplyr::select(Stay, Months_stayed, Sex, Age_num, Con_ACT, Prov, train)
+testing_clean<- df_clean %>% filter(train != TRUE) %>%
+  dplyr::select(Stay, Months_stayed, Sex, Age_num, Con_ACT, Prov, train)
+#testing_scaled<- df_clean %>% filter(!index %in% levels(training_scaled$index)) %>%
+#  select(Stay, Months_stayed, Sex, Age_num, Con_ACT, Prov)
+
+```
+
+## Fitting a classification tree
+```{r echo = TRUE}
+library(tree)
+library(vip)
+tree.df_clean <- tree(Stay ~ .-train-Prov, data = df_clean, subset = train)
+tree.pred <- predict(tree.df_clean, testing_clean, type = 'class')
+t<-data.frame(table(tree.pred, testing_clean$Stay))
+print(c('fit.accuracy', (t$Freq[1]+t$Freq[4])/sum(t$Freq)))
+summary(tree.df_clean)
+
+tree.df_clean
+plot(tree.df_clean)
+text(tree.df_clean, label = 'yprob')
+
+
+```
+
+### Pruning classification tree
+```{r echo = TRUE}
+set.seed(420)
+cv.df_clean <- cv.tree(tree.df_clean, FUN = prune.misclass)
+names(cv.df_clean)
+print(cv.df_clean)
+par(mfrow=c(1,2))
+plot(cv.df_clean$size, cv.df_clean$dev, type = 'b')
+plot(cv.df_clean$k, cv.df_clean$dev, type = 'b')
+
+prune.df_clean <- prune.misclass(tree.df_clean, best = 9)
+par(mfrow=c(1,1))
+plot(prune.df_clean)
+text(prune.df_clean, pretty = 0)
+
+tree.pred <- predict(prune.df_clean, testing_clean, type = 'class')
+t<- data.frame(table(tree.pred, testing_clean$Stay))
+print(c('fit.accuracy', (t$Freq[1]+t$Freq[4])/sum(t$Freq)))
+```
+
+
+
+```{r}
+library(randomForest)
+library(vip)
+library(ggplot2)
+library(pdp)
+set.seed(420)
+bag.df_clean <- randomForest(Stay ~ .-train, df_clean, subset = train, mtry = 5, importance = TRUE)
+print(bag.df_clean)
+yhat.bag <- predict(bag.df_clean, testing_clean)
+importance(bag.df_clean)
+par(mfrow=c(1,2))
+varImpPlot(bag.df_clean)
+vip(bag.df_clean, bar = FALSE, horizontal = FALSE, size = 1.5)
+partialPlot(bag.df_clean, pred.data = df_clean, x.var = "Months_stayed", )
+partialPlot(bag.df_clean, pred.data = df_clean, x.var = "Age_num")
+
+partial(bag.df_clean, pred.var = "Months_stayed", plot = TRUE, rug = TRUE)
+partial(bag.df_clean, pred.var = "Age_num", plot = TRUE, rug = TRUE)
+
+p1 <- partial(bag.df_clean, pred.var = c("Months_stayed", "Age_num"), plot = TRUE, chull = TRUE)
+p1$ylab <- "Patient age"
+p1$xlab <- "Months of treatment received"
+p2 <- partial(bag.df_clean, pred.var = c("Months_stayed", "Age_num"), plot = TRUE, chull = TRUE,
+              palette = "magma")
+grid.arrange(p1, p2, nrow = 1)
+#plot(yhat.bag, testing_clean$Stay)
+#abline(0,1)
+#mean((yhat.bag-testing_clean$Stay)^2)
+
+```
+
+#Boosting
+```{r}
+library(gbm)
+set.seed(420)
+boost.df<- df_clean %>%
+  mutate(Stay = case_when(Stay == 'Yes' ~ 1,
+                          Stay == 'No' ~ 0))
+boost.test<- df_clean %>%
+  mutate(Stay = case_when(Stay == 'Yes' ~ 1,
+                          Stay == 'No' ~ 0))
+boost.training_clean <- gbm(Stay ~ .-train, data= boost.test, distribution = 'bernoulli', n.trees = 1000, interaction.depth = 2)
+summary(boost.training_clean)
+print(boost.training_clean)
+
+par(mfrow=c(1,2))
+plot(boost.training_clean, i = 'Months_stayed')
+plot(boost.training_clean, i = 'Age_num')
+
+yhat.boost <- predict(boost.training_clean, newdata = boost.test, n.trees = 500 )
+mean((yhat.boost-boost.test$Stay)^2)
+```
+```{r}
+rel.inf.df <- summary(boost.training_clean)
+write.table(rel.inf.df, "rel_inf.txt", append = FALSE, sep = "\t", dec = ".",row.names = TRUE, col.names = TRUE)
+```
+
+##Plot boosting error by depth and n.trees
+
+```{r}
+n.depth = c(1,2,3,4,5)
+boost.err<-c()
+for ( i in n.depth){
+  boost.training_clean <- gbm(Stay ~ .-train, data= boost.test, distribution = 'bernoulli', n.trees =
+                              500, interaction.depth = 2)
+  yhat.boost = predict(boost.training_clean, newdata = boost.test, n.trees =500)
+  boost.err<- c(boost.err, mean((yhat.boost-boost.test$Stay)^2))
+}
+
+
+plot(n.depth, boost.err, pch = 23, ylab = "Mean Squared Error", xlab = "depth", main = "Boosting Test Error")
+abline(h = min(boost.err), col = "red")
+```
+
+```{r}
+n.trees = seq(from = 50, to = 500, by = 50)
+
+#boost.err<-c()
+#depth 2
+boost.training_clean <- gbm(Stay ~ .-train, data= boost.test, distribution = 'bernoulli', n.trees =
+                            500, interaction.depth = 2)
+predmat = predict(boost.training_clean, newdata = boost.test, n.trees =n.trees)
+dim(predmat)
+Depth_2 = with(boost.test, apply((predmat-boost.test$Stay)^2, 2, mean) )
+#plot(n.trees, boost.err$Depth_2, pch = 23, ylab = "Mean Squared Error", xlab = "# Trees", main = "Boosting Test Error")
+#abline(h = min(boost.err), col = "red")
+
+#depth 3
+boost.training_clean <- gbm(Stay ~ .-train, data= boost.test, distribution = 'bernoulli', n.trees =
+                            500, interaction.depth = 3)
+predmat = predict(boost.training_clean, newdata = boost.test, n.trees =n.trees)
+dim(predmat)
+Depth_3 = with(boost.test, apply((predmat-boost.test$Stay)^2, 2, mean) )
+
+#depth 4
+boost.training_clean <- gbm(Stay ~ .-train, data= boost.test, distribution = 'bernoulli', n.trees =
+                            500, interaction.depth = 4)
+predmat = predict(boost.training_clean, newdata = boost.test, n.trees =n.trees)
+dim(predmat)
+Depth_4 = with(boost.test, apply((predmat-boost.test$Stay)^2, 2, mean) )
+
+#depth 5
+boost.training_clean <- gbm(Stay ~ .-train, data= boost.test, distribution = 'bernoulli', n.trees =
+                            500, interaction.depth = 5)
+predmat = predict(boost.training_clean, newdata = boost.test, n.trees =n.trees)
+dim(predmat)
+Depth_5 = with(boost.test, apply((predmat-boost.test$Stay)^2, 2, mean) )
+
+```
+```{r}
+library(ggplot2)
+library(tidyr)
+boost.err<- data.frame(cbind(n.trees, Depth_2, Depth_3, Depth_4, Depth_5))
+boost.Err <- boost.err %>% gather(., c('Depth_2', 'Depth_3', 'Depth_4', 'Depth_5'), key = "depth", value = 'BoostError')
+#boost.Err$n.trees<- n.trees
+
+ggplot(boost.Err, aes(x = n.trees, y = BoostError, group = as.factor(depth))) + 
+  geom_line(aes(colour = as.factor(depth))) +
+  theme(legend.position="top")
+  
+#plot(n.trees, boost.err$BoostError, pch = 23, ylab = "Mean Squared Error", xlab = "# Trees", main = "Boosting Test Error", group = 'depth')
+```
