@@ -1,0 +1,421 @@
+---
+title: "Fitting data to linear models"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Import packages
+
+```{r echo=TRUE}
+library(lme4)
+library(car)
+library(dplyr)
+library(tidyr)
+```
+
+## Import and subset dataset
+- `df_clean` contains all rows of data that does not have `Null`/`UNKWN` in `Prov` and `Con_ACT`
+- `no_censor` contains all rows of df_clean where reason for discontinuation is not due to `censor`
+
+```{r echo=FALSE}
+require(tidyr)
+require(dplyr)
+df <- read.delim("../data/masterdf.txt")
+df$Tx_duration <-as.numeric(df$Tx_duration)
+df$Age <- ordered(df$Age, levels = c(levels(df$Age)))
+
+df_clean <- df %>% drop_na(Prov, Con_ACT) %>% 
+  mutate(Age_num = as.numeric(regmatches(Age, regexpr('[0-9]{2}', Age))))
+
+no_censor <- df_clean %>% filter (reason != 'censor')
+```
+
+
+## `df_clean`
+- Assume each row (patient) is independent
+
+### 1. Test for homogeneity of variance
+```{r echo=TRUE}
+require(car)
+#bartlett.test(Tx_duration ~ interaction(Con_ACT, Age_int, reason ,Prov, Sex), data=df_clean) 
+#Error in bartlett.test.default(c(12, 29, 5, 4, 27, 13, 11, 6, 4, 1, 6, : there must be at least 2 observations in each group
+
+leveneTest(Tx_duration ~ Con_ACT * Age * reason  *  Prov * Sex, data = df_clean)
+leveneTest(Tx_duration ~ Con_ACT * reason  *  Prov * Sex, data = df_clean)
+#fligner.test(Tx_duration ~ Con_ACT * Age * reason  *  Prov * Sex, data = df_clean) #non-parametric
+```
+
+### 2. Test for homogeneity of covariance
+```{r echo=TRUE}
+require(DFA.CANCOR)
+#homogeneity(data = df_clean, 
+#            groups = c('Prov', 'Con_ACT', 'Sex', 'reason'),
+#            variables = c('Tx_duration', 'Age_num'))
+
+```
+
+### 3. Linear model and model residuals
+```{r echo=TRUE}
+model <- lm(Tx_duration ~ Con_ACT * Age + reason  +  Prov + Sex, data = df_clean)
+shapiro.test(model$residuals)
+print(c("mean residuals:", mean(model$residuals)))
+print(c("median residuals:", median(model$residuals)))
+par(mfrow=c(2, 3))
+hist(model$residuals)
+plot(model)
+
+model <- lm(Tx_duration ~ Con_ACT * Age_num + reason  +  Prov + Sex, data = df_clean)
+shapiro.test(model$residuals)
+print(c("mean residuals:", mean(model$residuals)))
+print(c("median residuals:", median(model$residuals)))
+par(mfrow=c(2, 3))
+hist(model$residuals)
+plot(model)
+
+
+```
+
+### 4. Model summary
+```{r echo=TRUE}
+model <- lm(Tx_duration ~ Con_ACT * Age + reason  +  Prov + Sex, data = df_clean)
+summary(model)
+print(rbind(c('AIC', AIC(model)),
+            c('BIC', BIC(model)),
+            c('logLik', logLik(model))))
+
+model <- lm(Tx_duration ~ Con_ACT * Age_num + reason  +  Prov + Sex, data = df_clean)
+summary(model)
+print(rbind(c('AIC', AIC(model)),
+            c('BIC', BIC(model)),
+            c('logLik', logLik(model))))
+
+```
+
+### 5. Linear mixed model
+```{r echo=FALSE}
+model <- lmer(Tx_duration ~ Con_ACT + Age_num  +(1|reason)+ (1|Prov) + (1|Sex), REML= F,data = df_clean)
+#par(mfrow=c(2, 3))
+hist(resid(model))
+plot(model)
+summary(model)
+
+model <- lmer(Tx_duration ~ Con_ACT + Age  +(1|reason) + (1|Prov) + (1|Sex), REML= F,data = df_clean)
+#par(mfrow=c(2, 3))
+hist(resid(model))
+plot(model)
+summary(model)
+
+```
+
+
+## `no_censor`
+
+### 1. Test for homogeneity of variance
+Nothing passed test for homogeneity of variance
+```{r echo=TRUE}
+require(car)
+#bartlett.test(Tx_duration ~ interaction(Con_ACT, Age_num, Prov, Sex), data=no_censor) 
+#Error in bartlett.test.default(c(12, 29, 5, 4, 27, 13, 11, 6, 4, 1, 6, : there must be at least 2 observations in each group
+leveneTest(Tx_duration ~ Con_ACT * Age  *reason*  Prov * Sex, data =df_clean)
+leveneTest(Tx_duration ~ Con_ACT * reason* Prov * Sex, data =df_clean)
+
+leveneTest(Tx_duration ~ Con_ACT * Age  *  Prov * Sex, data = no_censor)
+leveneTest(Tx_duration ~ Con_ACT * Prov * Sex, data = no_censor)
+#fligner.test(Tx_duration ~ Con_ACT * Age_num * reason  *  Prov * Sex, data = df_clean) #non-parametric
+```
+
+### 2. Test for homogeneity of covariance
+```{r echo=TRUE}
+require(DFA.CANCOR)
+#homogeneity(data = no_censor, 
+#            groups = c('Prov', 'Con_ACT', 'Sex', 'reason'),
+#            variables = c('Tx_duration', 'Age_num'))
+
+```
+
+### 3. Linear model and model residuals
+```{r eval=FALSE, include=FALSE}
+model <- lm(Tx_duration ~ Con_ACT * Age +  Prov + Sex, data = no_censor)
+shapiro.test(model$residuals)
+print(c("mean residuals:", mean(model$residuals)))
+print(c("median residuals:", median(model$residuals)))
+par(mfrow=c(2, 3))
+hist(model$residuals)
+plot(model)
+
+#Do not consider this model because including Age_num gives unequal variance among groups
+#model <- lm(Tx_duration ~ Con_ACT * Age_num +  Prov + Sex, data = no_censor)
+#shapiro.test(model$residuals)
+#print(c("mean residuals:", mean(model$residuals)))
+#print(c("median residuals:", median(model$residuals)))
+#par(mfrow=c(2, 3))
+#hist(model$residuals)
+p#lot(model)
+
+
+```
+
+### 4. Model summary
+```{r eval=FALSE, include=FALSE}
+model <- lm(Tx_duration ~ Con_ACT * Age  +  Prov + Sex, data = no_censor)
+summary(model)
+print(rbind(c('AIC', AIC(model)),
+            c('BIC', BIC(model)),
+            c('logLik', logLik(model))))
+#Do not consider this model because including Age_num gives unequal variance among groups
+#model <- lm(Tx_duration ~ Con_ACT * Age_num + reason  +  Prov + Sex, data = no_censor)
+#summary(model)
+
+
+```
+
+### 5. Linear mixed model
+```{r eval=FALSE, include=FALSE}
+model <- lmer(Tx_duration ~ Con_ACT *Age_num+ (1|Sex) +(1|reason)+ (1|Prov),
+              REML = F, 
+              data =df_clean)
+#par(mfrow=c(1, 2))
+hist(resid(model))
+plot(model)
+summary(model)
+
+model <- lmer(Tx_duration ~ Con_ACT *Age+ (1|Sex) +(1|reason)+ (1|Prov),
+              REML = F, 
+              data =df_clean)
+#par(mfrow=c(1, 2))
+hist(resid(model))
+plot(model)
+summary(model)
+
+model <- lmer(Tx_duration ~ Con_ACT *Age_num  + (1|Prov) + (1|Sex),REML = F, data = no_censor)
+#par(mfrow=c(2, 3))
+hist(resid(model))
+plot(model)
+summary(model)
+
+```
+
+
+## `scaled_df_clean`and `scaled_no_censor`
+```{r echo = FALSE}
+
+scale_this <- function(x){
+  (x - mean(x, na.rm=TRUE)) / sd(x, na.rm=TRUE)
+}
+
+
+scaled_df_clean <- df_clean %>%
+  mutate(Tx_duration = scale_this(Tx_duration),
+         Age_num = scale_this(Age_num))
+
+scaled_no_censor <- scaled_df_clean %>% filter (reason != 'censor')
+
+```
+
+### 1. Test for homogeneity of variance
+
+Passed homogeneity of variance:
+- `scaled_df_clean` with `Age_num` as numeric explanatory variable
+- `scaled_df_clean` with `Age`
+- `scaled_no_censor` with `Age_num`
+
+```{r echo=TRUE}
+require(car)
+df <- scaled_df_clean
+leveneTest(Tx_duration ~ Con_ACT *Age *  Prov * Sex, data = df)
+leveneTest(Tx_duration ~ Con_ACT * Prov * Sex, data = df)
+#bartlett.test(Tx_duration ~ interaction(Con_ACT, Age_num, Prov, Sex),
+#              data=df) 
+
+
+df <- scaled_no_censor
+leveneTest(Tx_duration ~ Con_ACT *Age *  Prov * Sex, data = df)
+leveneTest(Tx_duration ~ Con_ACT * Prov * Sex, data = df)
+#fligner.test(Tx_duration ~ Con_ACT * Age_num * reason  *  Prov * Sex, data = df_clean) #non-parametric
+```
+
+### 2. Test for homogeneity of covariance
+```{r eval=FALSE, include=FALSE}
+require(rstatix)
+require(covTestR)
+test <- scaled_df_clean %>% 
+  mutate(Group1 = as.factor(paste0(reason, Prov, Con_ACT, Sex)),
+         Group2 = as.factor(paste0(Age, reason, Prov, Con_ACT, Sex))) %>% 
+  select(Tx_duration, Age_num, Group1) 
+#f <- box_m(data = test[,-3], group = test[,3])
+#f1<-homogeneityCovariances(test, 
+#            group = Group1)
+f1<- test %>%  group_by(Group1) %>% 
+      tally()
+#print(f1)
+```
+
+### 3. Linear model and model residuals
+
+#### With interaction
+```{r echo=TRUE}
+
+#`scaled_df_clean` with `Age_num` as numeric explanatory variable
+df <- scaled_df_clean
+model <- lm(Tx_duration ~ Con_ACT * Age_num + reason+ Prov + Sex, data = df)
+shapiro.test(model$residuals)
+print(c("mean residuals:", mean(model$residuals)))
+print(c("median residuals:", median(model$residuals)))
+par(mfrow=c(2, 3))
+hist(model$residuals)
+plot(model)
+
+
+
+#`scaled_df_clean` with `Age`
+df <- scaled_df_clean
+model <- lm(Tx_duration ~ Con_ACT * Age + reason+ Prov + Sex, data = df)
+shapiro.test(model$residuals)
+print(c("mean residuals:", mean(model$residuals)))
+print(c("median residuals:", median(model$residuals)))
+par(mfrow=c(2, 3))
+hist(model$residuals)
+plot(model)
+
+
+#`scaled_no_censor` with `Age_num`
+df <- scaled_no_censor
+model <- lm(Tx_duration ~ Con_ACT * Age_num + Prov + Sex, data = df)
+shapiro.test(model$residuals)
+print(c("mean residuals:", mean(model$residuals)))
+print(c("median residuals:", median(model$residuals)))
+par(mfrow=c(2, 3))
+hist(model$residuals)
+plot(model)
+
+
+```
+
+#### Without interaction
+```{r echo=TRUE}
+
+#`scaled_df_clean` with `Age_num` as numeric explanatory variable
+df <- scaled_df_clean
+model <- lm(Tx_duration ~ Con_ACT + Age_num + reason+ Prov + Sex, data = df)
+shapiro.test(model$residuals)
+print(c("mean residuals:", mean(model$residuals)))
+print(c("median residuals:", median(model$residuals)))
+par(mfrow=c(2, 3))
+hist(model$residuals)
+plot(model)
+
+
+
+#`scaled_df_clean` with `Age`
+df <- scaled_df_clean
+model <- lm(Tx_duration ~ Con_ACT + Age + reason+ Prov + Sex, data = df)
+shapiro.test(model$residuals)
+print(c("mean residuals:", mean(model$residuals)))
+print(c("median residuals:", median(model$residuals)))
+par(mfrow=c(2, 3))
+hist(model$residuals)
+plot(model)
+
+
+#`scaled_no_censor` with `Age_num`
+df <- scaled_no_censor
+model <- lm(Tx_duration ~ Con_ACT + Age_num + Prov + Sex, data = df)
+shapiro.test(model$residuals)
+print(c("mean residuals:", mean(model$residuals)))
+print(c("median residuals:", median(model$residuals)))
+par(mfrow=c(2, 3))
+hist(model$residuals)
+plot(model)
+
+
+```
+
+### 4. Model summary
+```{r echo=TRUE}
+#`scaled_df_clean` with `Age_num` as numeric explanatory variable
+df <- scaled_df_clean
+model <- lm(Tx_duration ~ Con_ACT * Age_num + reason+ Prov + Sex, data = df)
+summary(model)
+print(rbind(c('AIC', AIC(model)),
+            c('BIC', BIC(model)),
+            c('logLik', logLik(model))))
+
+#`scaled_df_clean` with `Age`
+df <- scaled_df_clean
+model <- lm(Tx_duration ~ Con_ACT * Age + reason+ Prov + Sex, data = df)
+summary(model)
+print(rbind(c('AIC', AIC(model)),
+            c('BIC', BIC(model)),
+            c('logLik', logLik(model))))
+
+#`scaled_no_censor` with `Age_num`
+df <- scaled_no_censor
+model <- lm(Tx_duration ~ Con_ACT * Age_num + Prov + Sex, data = df)
+summary(model)
+print(rbind(c('AIC', AIC(model)),
+            c('BIC', BIC(model)),
+            c('logLik', logLik(model))))
+#Do not consider this model because including Age_num gives unequal variance among groups
+#model <- lm(Tx_duration ~ Con_ACT * Age_num + reason  +  Prov + Sex, data = no_censor)
+#summary(model)
+
+
+```
+
+### 5. Linear mixed model
+
+##### Preferred models
+```{r echo=TRUE}
+require(lmerTest)
+model <- lmer(Tx_duration ~ Con_ACT + Age_num+  reason + Sex  + (1|Prov),REML = F, data = scaled_df_clean)
+par(mfrow=c(1, 1))
+hist(resid(model))
+shapiro.test(resid(model))
+qqnorm(y = resid(model))
+plot(model)
+summary(model)
+
+model <- lmer(Tx_duration ~ Con_ACT + Age_num+  reason + (1|Sex)  + (1|Prov),REML = F, data = scaled_df_clean)
+#par(mfrow=c(1, 1))
+hist(resid(model))
+shapiro.test(resid(model))
+qqnorm(y = resid(model))
+plot(model)
+summary(model)
+
+model <- lmer(Tx_duration ~ Con_ACT * Age_num+  reason + (1|Sex)  + (1|Prov),REML = F, data = scaled_df_clean)
+#par(mfrow=c(1, 1))
+hist(resid(model))
+shapiro.test(resid(model))
+qqnorm(y = resid(model))
+plot(model)
+summary(model)
+
+```
+
+##### Other models
+```{r echo=TRUE}
+model <- lmer(Tx_duration ~ Con_ACT * Age + reason + (1|Prov) + (1|Sex) , REML = F,  data = scaled_df_clean)
+hist(resid(model))
+qqnorm(y = resid(model))
+plot(model)
+shapiro.test(resid(model))
+summary(model)
+#vcov(model)
+
+
+model <- lmer(Tx_duration ~ Con_ACT * Age_num  + (1|Prov) + (1|Sex), REML = F, data = scaled_df_clean)
+hist(resid(model))
+shapiro.test(resid(model))
+plot(model)
+qqnorm(y = resid(model))
+summary(model)
+
+model <- lmer(Tx_duration ~ Con_ACT * Age_num  + Sex + (1|Prov) , REML = F, data = scaled_df_clean)
+hist(resid(model))
+shapiro.test(resid(model))
+plot(model)
+qqnorm(y = resid(model))
+summary(model)
+```
